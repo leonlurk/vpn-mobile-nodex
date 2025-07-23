@@ -1,5 +1,5 @@
 /**
- * SERVIDOR PRINCIPAL - Nodex VPN Server
+ * SERVIDOR PRINCIPAL - Nodex VPN Server con WireGuard
  */
 
 import express from 'express';
@@ -7,7 +7,7 @@ import cors from 'cors';
 import helmet from 'helmet';
 import morgan from 'morgan';
 import config from './config';
-import { NodexServer } from './vpn/NodexServer';
+import { WireGuardServer } from './vpn/WireGuardServer';
 import authRoutes from './api/auth';
 import vpnRoutes from './api/vpn';
 import usersRoutes from './api/users';
@@ -16,8 +16,11 @@ import { ApiResponse } from './types';
 
 const app = express();
 
-// Inicializar servidor VPN
-const vpnServer = new NodexServer(config.vpn);
+// Inicializar servidor WireGuard
+const wireGuardServer = new WireGuardServer(
+  config.vpn.serverIp, 
+  config.vpn.wireGuardPort || 51820
+);
 
 // Middleware de seguridad
 app.use(helmet({
@@ -44,17 +47,21 @@ if (config.NODE_ENV === 'development') {
 }
 
 // Health check
-app.get('/health', (req, res) => {
+app.get('/health', async (req, res) => {
+  const stats = await wireGuardServer.getConnectionStats();
+  
   const response: ApiResponse = {
     success: true,
     data: {
       status: 'OK',
-      version: '1.0.0',
+      version: '2.0.0',
       uptime: process.uptime(),
       timestamp: new Date(),
       vpnServer: {
-        status: vpnServer.isRunning() ? 'running' : 'stopped',
-        connections: vpnServer.getActiveConnections().length
+        type: 'WireGuard',
+        status: wireGuardServer.isRunning() ? 'running' : 'stopped',
+        connections: stats.totalPeers || 0,
+        peers: stats.peers || []
       }
     },
     timestamp: new Date()
@@ -68,24 +75,57 @@ app.use('/api/vpn', vpnRoutes);
 app.use('/api/users', usersRoutes);
 
 // Ruta para obtener información del servidor
-app.get('/api/server/info', (req, res) => {
+app.get('/api/server/info', async (req, res) => {
+  const serverConfig = wireGuardServer.getServerConfig();
+  const stats = await wireGuardServer.getConnectionStats();
+  
   const response: ApiResponse = {
     success: true,
     data: {
       name: 'Nodex VPN Server',
+      type: 'WireGuard',
       location: 'Europe',
-      flag: '🇪🇺',
-      address: config.vpn.serverIp,
-      port: config.vpn.tcpPort,
+      flag: '🇪🇸',
+      address: serverConfig.address,
+      port: serverConfig.port,
+      publicKey: serverConfig.publicKey,
       ping: 25,
-      load: vpnServer.getServerLoad(),
-      available: vpnServer.isRunning(),
-      maxConnections: config.vpn.maxConnections,
-      activeConnections: vpnServer.getActiveConnections().length
+      load: Math.round((stats.totalPeers / 100) * 100), // Estimado
+      available: wireGuardServer.isRunning(),
+      maxConnections: 100,
+      activeConnections: stats.totalPeers || 0,
+      protocol: 'WireGuard'
     },
     timestamp: new Date()
   };
   res.json(response);
+});
+
+// Nuevo endpoint para generar configuración WireGuard
+app.post('/api/vpn/wireguard-config', async (req, res) => {
+  try {
+    const userId = req.body.userId || 'anonymous-' + Date.now();
+    const config = await wireGuardServer.generateClientConfig(userId);
+    
+    const response: ApiResponse = {
+      success: true,
+      data: {
+        config,
+        serverInfo: wireGuardServer.getServerConfig(),
+        userId
+      },
+      timestamp: new Date()
+    };
+    
+    res.json(response);
+  } catch (error) {
+    const response: ApiResponse = {
+      success: false,
+      error: error instanceof Error ? error.message : 'Error generando configuración',
+      timestamp: new Date()
+    };
+    res.status(500).json(response);
+  }
 });
 
 // Manejo de errores
@@ -118,7 +158,7 @@ app.use('*', (req, res) => {
  */
 async function startServer() {
   try {
-    console.log('🚀 Iniciando Nodex VPN Server...');
+    console.log('🚀 Iniciando Nodex VPN Server con WireGuard...');
     
     // Inicializar Firebase si está configurado
     if (config.firebase.projectId) {
@@ -128,16 +168,16 @@ async function startServer() {
       console.log('⚠️  Firebase no configurado, usando autenticación simple');
     }
     
-    // Iniciar servidor VPN
-    await vpnServer.start();
-    console.log(`✅ Servidor VPN iniciado en puertos TCP:${config.vpn.tcpPort}, UDP:${config.vpn.udpPort}`);
+    // Iniciar servidor WireGuard
+    await wireGuardServer.start();
+    console.log(`✅ WireGuard Server iniciado en ${config.vpn.serverIp}:${config.vpn.wireGuardPort || 51820}`);
     
     // Iniciar servidor HTTP
     const server = app.listen(config.PORT, () => {
       console.log(`✅ Servidor HTTP corriendo en puerto ${config.PORT}`);
       console.log(`🌍 Entorno: ${config.NODE_ENV}`);
       console.log(`🔗 API: http://${config.vpn.serverIp}:${config.PORT}`);
-      console.log(`🔒 VPN: ${config.vpn.serverIp}:${config.vpn.tcpPort}`);
+      console.log(`🔒 VPN: WireGuard en ${config.vpn.serverIp}:${config.vpn.wireGuardPort || 51820}`);
     });
 
     // Manejo de cierre graceful
@@ -161,8 +201,8 @@ async function startServer() {
  * Cierre graceful del servidor
  */
 async function shutdown(server: any) {
-  console.log('🔄 Cerrando conexiones VPN...');
-  await vpnServer.stop();
+  console.log('🔄 Cerrando servidor WireGuard...');
+  await wireGuardServer.stop();
   
   console.log('🔄 Cerrando servidor HTTP...');
   server.close(() => {

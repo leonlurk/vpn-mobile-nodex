@@ -1,8 +1,8 @@
 /**
- * TIPOS TYPESCRIPT - Servidor VPN Nodex
+ * TIPOS TYPESCRIPT - Servidor VPN Nodex con WireGuard
  */
 
-// Configuración del servidor VPN
+// Configuración del servidor VPN (legacy)
 export interface VpnServerConfig {
   serverIp: string;
   tcpPort: number;
@@ -12,7 +12,39 @@ export interface VpnServerConfig {
   keepAliveInterval: number;
 }
 
-// Configuración de conexión del cliente
+// Configuración WireGuard
+export interface WireGuardConfig {
+  wireGuardPort: number;
+  interface: string;
+  serverVpnIp: string;
+  clientSubnet: string;
+  dns: string[];
+}
+
+// Peer de WireGuard
+export interface WireGuardPeer {
+  userId: string;
+  publicKey: string;
+  privateKey: string;
+  allowedIPs: string;
+  endpoint?: string;
+  lastHandshake?: Date;
+  bytesReceived?: number;
+  bytesSent?: number;
+}
+
+// Configuración del cliente WireGuard
+export interface WireGuardClientConfig {
+  clientPrivateKey: string;
+  clientPublicKey: string;
+  clientAddress: string;
+  serverPublicKey: string;
+  serverEndpoint: string;
+  dns: string[];
+  allowedIPs: string;
+}
+
+// Configuración de conexión del cliente (legacy)
 export interface ClientVpnConfig {
   serverAddress: string;
   serverPort: number;
@@ -30,6 +62,7 @@ export interface ConnectionState {
   lastActivity?: Date;
   bytesReceived: number;
   bytesSent: number;
+  protocol?: 'nodex' | 'wireguard';
 }
 
 // Estadísticas de conexión
@@ -41,6 +74,7 @@ export interface ConnectionStats {
   connectionTime: number;
   serverLocation: string;
   ping: number;
+  protocol: 'nodex' | 'wireguard';
 }
 
 // Información del servidor
@@ -54,6 +88,8 @@ export interface ServerInfo {
   ping: number;
   load: number;
   available: boolean;
+  protocol?: 'nodex' | 'wireguard';
+  publicKey?: string; // Para WireGuard
 }
 
 // Usuario autenticado
@@ -66,7 +102,7 @@ export interface AuthenticatedUser {
   customClaims?: any;
 }
 
-// Paquete del protocolo Nodex
+// Paquete del protocolo Nodex (legacy)
 export interface NodexPacket {
   version: number;
   type: PacketType;
@@ -76,7 +112,7 @@ export interface NodexPacket {
   signature: Buffer;
 }
 
-// Tipos de paquetes del protocolo
+// Tipos de paquetes del protocolo (legacy)
 export enum PacketType {
   AUTH_REQUEST = 0x01,
   AUTH_RESPONSE = 0x02,
@@ -93,6 +129,7 @@ export interface VpnConnectionEvent {
   event: 'connected' | 'disconnected' | 'error';
   timestamp: Date;
   data?: any;
+  protocol?: 'nodex' | 'wireguard';
 }
 
 // Configuración de Firebase
@@ -115,11 +152,19 @@ export interface AuthenticatedRequest extends Request {
   user?: AuthenticatedUser;
 }
 
-// Configuración del túnel
+// Configuración del túnel (legacy)
 export interface TunnelConfig {
   clientIp: string;
   serverIp: string;
   dns: string[];
   routes: string[];
   mtu: number;
+}
+
+// Estadísticas del servidor WireGuard
+export interface WireGuardStats {
+  peers: WireGuardPeer[];
+  totalPeers: number;
+  interface: string;
+  serverLoad: number;
 } 

@@ -3,7 +3,7 @@
  */
 
 import dotenv from 'dotenv';
-import { VpnServerConfig, FirebaseConfig } from '../types';
+import { VpnServerConfig, FirebaseConfig, WireGuardConfig } from '../types';
 
 // Cargar variables de entorno
 dotenv.config();
@@ -11,8 +11,6 @@ dotenv.config();
 const requiredEnvVars = [
   'NODE_ENV',
   'PORT',
-  'VPN_TCP_PORT', 
-  'VPN_UDP_PORT',
   'SERVER_IP',
   'JWT_SECRET'
 ];
@@ -29,15 +27,23 @@ export const config = {
   NODE_ENV: process.env.NODE_ENV || 'development',
   PORT: parseInt(process.env.PORT || '3000'),
   
-  // Configuración VPN
+  // Configuración VPN (legacy + WireGuard)
   vpn: {
     serverIp: process.env.SERVER_IP!,
-    tcpPort: parseInt(process.env.VPN_TCP_PORT!),
-    udpPort: parseInt(process.env.VPN_UDP_PORT!),
+    // Legacy ports (mantener para compatibilidad)
+    tcpPort: parseInt(process.env.VPN_TCP_PORT || '8443'),
+    udpPort: parseInt(process.env.VPN_UDP_PORT || '8444'),
+    // WireGuard configuration
+    wireGuardPort: parseInt(process.env.WIREGUARD_PORT || '51820'),
+    interface: process.env.WG_INTERFACE || 'wg0',
+    serverVpnIp: process.env.WG_SERVER_IP || '10.0.0.1',
+    clientSubnet: process.env.WG_CLIENT_SUBNET || '10.0.0.0/24',
+    dns: process.env.WG_DNS?.split(',') || ['8.8.8.8', '8.8.4.4'],
+    // General VPN settings
     maxConnections: parseInt(process.env.MAX_CONCURRENT_CONNECTIONS || '100'),
     connectionTimeout: parseInt(process.env.CONNECTION_TIMEOUT || '30000'),
     keepAliveInterval: parseInt(process.env.KEEP_ALIVE_INTERVAL || '30000')
-  } as VpnServerConfig,
+  } as VpnServerConfig & WireGuardConfig,
 
   // Configuración JWT
   jwt: {
