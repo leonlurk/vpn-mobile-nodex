@@ -53,7 +53,7 @@ router.post('/login', async (req: Request, res: Response) => {
       email: decodedToken.email,
       subscription: hasActiveSubscription 
     };
-    const options: jwt.SignOptions = { expiresIn: config.jwt.expiresIn as string };
+    const options: jwt.SignOptions = { expiresIn: config.jwt.expiresIn };
     const internalToken = jwt.sign(payload, config.jwt.secret, options);
 
     // Obtener información completa del usuario
@@ -125,7 +125,7 @@ router.post('/register', async (req: Request, res: Response) => {
       email: decodedToken.email,
       subscription: true // Plan gratuito activo
     };
-    const registerOptions: jwt.SignOptions = { expiresIn: config.jwt.expiresIn as string };
+    const registerOptions: jwt.SignOptions = { expiresIn: config.jwt.expiresIn };
     const internalToken = jwt.sign(registerPayload, config.jwt.secret, registerOptions);
 
     const response: ApiResponse = {
@@ -263,7 +263,7 @@ router.post('/refresh', async (req: Request, res: Response) => {
       email: decodedToken.email,
       subscription: await checkUserSubscription(decodedToken.uid)
     };
-    const refreshOptions: jwt.SignOptions = { expiresIn: config.jwt.expiresIn as string };
+    const refreshOptions: jwt.SignOptions = { expiresIn: config.jwt.expiresIn };
     const newInternalToken = jwt.sign(refreshPayload, config.jwt.secret, refreshOptions);
 
     const response: ApiResponse = {

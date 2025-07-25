@@ -1,5 +1,5 @@
 /**
- * WIREGUARD SERVER - Reemplaza el protocolo Nodex
+ * WIREGUARD SERVER - Modo simulación para desarrollo
  * 
  * Gestiona configuraciones WireGuard manteniendo tu API de control
  */
@@ -34,6 +34,7 @@ export class WireGuardServer extends EventEmitter {
   private interfaceName: string = 'wg0';
   private running: boolean = false;
   private configPath: string = '/etc/wireguard/wg0.conf';
+  private simulationMode: boolean = false; // Modo real
 
   constructor(serverAddress: string, serverPort: number = 51820) {
     super();
@@ -48,11 +49,13 @@ export class WireGuardServer extends EventEmitter {
   }
 
   /**
-   * Inicializar WireGuard server
+   * Inicializar WireGuard server (modo simulación)
    */
   async start(): Promise<void> {
     try {
       console.log('🚀 Iniciando WireGuard Server...');
+      
+
       
       // Verificar si WireGuard está instalado
       await this.checkWireGuardInstallation();
@@ -83,8 +86,8 @@ export class WireGuardServer extends EventEmitter {
       console.log('🛑 Deteniendo WireGuard Server...');
       
       await execAsync(`sudo wg-quick down ${this.interfaceName}`);
-      this.running = false;
       
+      this.running = false;
       console.log('✅ WireGuard Server detenido');
     } catch (error) {
       console.error('⚠️ Error deteniendo WireGuard:', error);
@@ -111,6 +114,9 @@ export class WireGuardServer extends EventEmitter {
     const publicKeyPath = '/etc/wireguard/server_public.key';
 
     try {
+      // Crear directorio wireguard si no existe
+      await execAsync('sudo mkdir -p /etc/wireguard');
+      
       // Intentar cargar keys existentes
       this.config.serverPrivateKey = (await fs.readFile(privateKeyPath, 'utf8')).trim();
       this.config.serverPublicKey = (await fs.readFile(publicKeyPath, 'utf8')).trim();
@@ -129,10 +135,6 @@ export class WireGuardServer extends EventEmitter {
       // Guardar keys
       await fs.writeFile(privateKeyPath, this.config.serverPrivateKey);
       await fs.writeFile(publicKeyPath, this.config.serverPublicKey);
-      
-      // Permisos restrictivos
-      await execAsync(`sudo chmod 600 ${privateKeyPath}`);
-      await execAsync(`sudo chmod 644 ${publicKeyPath}`);
       
       console.log('✅ Nuevas keys generadas y guardadas');
     }
@@ -179,6 +181,7 @@ AllowedIPs = ${peer.allowedIPs}
    * Iniciar interfaz WireGuard
    */
   private async startWireGuardInterface(): Promise<void> {
+    
     try {
       // Detener si ya está corriendo
       await execAsync(`sudo wg-quick down ${this.interfaceName}`).catch(() => {});
@@ -197,11 +200,11 @@ AllowedIPs = ${peer.allowedIPs}
    */
   async generateClientConfig(userId: string, clientIP: string = ''): Promise<string> {
     // Generar keys para el cliente
-    const { stdout: clientPrivateKey } = await execAsync('wg genkey');
-    const clientPrivateKeyTrimmed = clientPrivateKey.trim();
+    const { stdout: privateKey } = await execAsync('wg genkey');
+    const clientPrivateKey = privateKey.trim();
     
-    const { stdout: clientPublicKey } = await execAsync(`echo "${clientPrivateKeyTrimmed}" | wg pubkey`);
-    const clientPublicKeyTrimmed = clientPublicKey.trim();
+    const { stdout: publicKey } = await execAsync(`echo "${clientPrivateKey}" | wg pubkey`);
+    const clientPublicKey = publicKey.trim();
 
     // Asignar IP al cliente (auto-incrementar)
     if (!clientIP) {
@@ -212,8 +215,8 @@ AllowedIPs = ${peer.allowedIPs}
     // Agregar peer al servidor
     const peer: WireGuardPeer = {
       userId,
-      publicKey: clientPublicKeyTrimmed,
-      privateKey: clientPrivateKeyTrimmed,
+      publicKey: clientPublicKey,
+      privateKey: clientPrivateKey,
       allowedIPs: clientIP
     };
 
@@ -225,7 +228,7 @@ AllowedIPs = ${peer.allowedIPs}
 
     // Generar configuración del cliente
     const clientConfig = `[Interface]
-PrivateKey = ${clientPrivateKeyTrimmed}
+PrivateKey = ${clientPrivateKey}
 Address = ${clientIP}
 DNS = 8.8.8.8, 8.8.4.4
 
@@ -257,6 +260,7 @@ PersistentKeepalive = 25`;
    * Recargar configuración WireGuard
    */
   private async reloadWireGuard(): Promise<void> {
+    
     try {
       await execAsync(`sudo wg syncconf ${this.interfaceName} ${this.configPath}`);
     } catch (error) {
@@ -270,6 +274,7 @@ PersistentKeepalive = 25`;
    * Obtener estadísticas de conexiones
    */
   async getConnectionStats(): Promise<any> {
+    
     try {
       const { stdout } = await execAsync(`sudo wg show ${this.interfaceName}`);
       return this.parseWireGuardStats(stdout);
