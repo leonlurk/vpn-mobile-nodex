@@ -5,7 +5,7 @@
  */
 
 import { Router, Request, Response, NextFunction } from 'express';
-import jwt from 'jsonwebtoken';
+import * as jwt from 'jsonwebtoken';
 import { 
   verifyFirebaseToken, 
   createOrUpdateUser, 
@@ -48,15 +48,13 @@ router.post('/login', async (req: Request, res: Response) => {
     const hasActiveSubscription = await checkUserSubscription(decodedToken.uid);
 
     // Crear JWT para sesiones internas
-    const internalToken = jwt.sign(
-      { 
-        uid: decodedToken.uid,
-        email: decodedToken.email,
-        subscription: hasActiveSubscription 
-      },
-      config.jwt.secret,
-      { expiresIn: config.jwt.expiresIn }
-    );
+    const payload = { 
+      uid: decodedToken.uid,
+      email: decodedToken.email,
+      subscription: hasActiveSubscription 
+    };
+    const options: jwt.SignOptions = { expiresIn: config.jwt.expiresIn as string };
+    const internalToken = jwt.sign(payload, config.jwt.secret, options);
 
     // Obtener información completa del usuario
     const userInfo = await getUserInfo(decodedToken.uid);
@@ -122,15 +120,13 @@ router.post('/register', async (req: Request, res: Response) => {
     });
 
     // Crear JWT interno
-    const internalToken = jwt.sign(
-      { 
-        uid: decodedToken.uid,
-        email: decodedToken.email,
-        subscription: true // Plan gratuito activo
-      },
-      config.jwt.secret,
-      { expiresIn: config.jwt.expiresIn }
-    );
+    const registerPayload = { 
+      uid: decodedToken.uid,
+      email: decodedToken.email,
+      subscription: true // Plan gratuito activo
+    };
+    const registerOptions: jwt.SignOptions = { expiresIn: config.jwt.expiresIn as string };
+    const internalToken = jwt.sign(registerPayload, config.jwt.secret, registerOptions);
 
     const response: ApiResponse = {
       success: true,
@@ -262,15 +258,13 @@ router.post('/refresh', async (req: Request, res: Response) => {
     const decodedToken = await verifyFirebaseToken(refreshToken);
     
     // Crear nuevo JWT interno
-    const newInternalToken = jwt.sign(
-      { 
-        uid: decodedToken.uid,
-        email: decodedToken.email,
-        subscription: await checkUserSubscription(decodedToken.uid)
-      },
-      config.jwt.secret,
-      { expiresIn: config.jwt.expiresIn }
-    );
+    const refreshPayload = { 
+      uid: decodedToken.uid,
+      email: decodedToken.email,
+      subscription: await checkUserSubscription(decodedToken.uid)
+    };
+    const refreshOptions: jwt.SignOptions = { expiresIn: config.jwt.expiresIn as string };
+    const newInternalToken = jwt.sign(refreshPayload, config.jwt.secret, refreshOptions);
 
     const response: ApiResponse = {
       success: true,

@@ -9,15 +9,16 @@ import { promises as fs } from 'fs';
 import { EventEmitter } from 'events';
 import { promisify } from 'util';
 import * as crypto from 'crypto';
+import { WireGuardPeer } from '../types';
 
 const execAsync = promisify(exec);
 
-export interface WireGuardPeer {
-  userId: string;
+// Interfaz para estadísticas de peer
+interface PeerStats {
   publicKey: string;
-  privateKey: string;
-  allowedIPs: string;
-  endpoint?: string;
+  lastHandshake?: Date | undefined;
+  bytesReceived: number;
+  bytesSent: number;
 }
 
 export interface WireGuardConfig {
@@ -283,21 +284,23 @@ PersistentKeepalive = 25`;
   private parseWireGuardStats(output: string): any {
     const peers = [];
     const lines = output.split('\n');
-    
-    let currentPeer = null;
+    let currentPeer: PeerStats | null = null;
     
     for (const line of lines) {
       if (line.includes('peer:')) {
         if (currentPeer) peers.push(currentPeer);
         currentPeer = {
           publicKey: line.split('peer:')[1].trim(),
-          lastHandshake: null,
+          lastHandshake: undefined,
           bytesReceived: 0,
           bytesSent: 0
-        };
+        } as PeerStats;
       } else if (currentPeer) {
         if (line.includes('latest handshake:')) {
-          currentPeer.lastHandshake = line.split('latest handshake:')[1].trim();
+          const handshakeStr = line.split('latest handshake:')[1].trim();
+          if (handshakeStr && handshakeStr !== '(never)') {
+            currentPeer.lastHandshake = new Date(handshakeStr);
+          }
         } else if (line.includes('transfer:')) {
           const transfer = line.split('transfer:')[1].trim();
           const parts = transfer.split(',');
