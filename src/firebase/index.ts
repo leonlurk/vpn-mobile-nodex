@@ -12,7 +12,7 @@ import path from 'path';
 // Configuración del proyecto
 const FIREBASE_CONFIG = {
   projectId: 'nodexvpn',
-  serviceAccountPath: path.join(__dirname, '../../serviceAccountKey.json')
+  serviceAccountPath: path.join(__dirname, '../../config/serviceAccountKey.json')
 };
 
 let firebaseApp: admin.app.App | null = null;
