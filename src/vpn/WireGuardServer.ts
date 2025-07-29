@@ -206,9 +206,42 @@ AllowedIPs = ${peer.allowedIPs}
       // PASO 5: Verificar reglas aplicadas
       await this.verifyFirewallRules();
       
+      // PASO 6: Iniciar monitoreo de handshakes
+      this.startHandshakeMonitoring();
+      
     } catch (error) {
       throw new Error(`Error iniciando interfaz WireGuard: ${error}`);
     }
+  }
+
+  /**
+   * Monitorear handshakes de WireGuard en tiempo real
+   */
+  private startHandshakeMonitoring(): void {
+    console.log('👁️ Iniciando monitoreo de handshakes WireGuard...');
+    
+    // Monitorear cada 30 segundos
+    setInterval(async () => {
+      try {
+        const { stdout: wgStatus } = await execAsync('sudo wg show wg0 latest-handshakes');
+        const { stdout: wgTransfer } = await execAsync('sudo wg show wg0 transfer');
+        
+        if (wgStatus.trim() && wgStatus !== 'wg0') {
+          console.log('🤝 Handshakes detectados:', wgStatus);
+          console.log('📊 Transferencia:', wgTransfer);
+        } else if (this.config.peers.size > 0) {
+          console.log(`⏳ ${this.config.peers.size} peers configurados pero sin handshakes...`);
+          
+          // Mostrar últimos peers agregados
+          const lastPeers = Array.from(this.config.peers.entries()).slice(-2);
+          lastPeers.forEach(([userId, peer]) => {
+            console.log(`   👤 ${userId}: ${peer.publicKey.substring(0, 20)}...`);
+          });
+        }
+      } catch (e) {
+        // Silencioso - no spam logs si no hay peers
+      }
+    }, 30000);
   }
 
   /**
@@ -317,6 +350,44 @@ AllowedIPs = ${peer.allowedIPs}
         }
       } catch (e) {
         console.log('⚠️ Error verificando WireGuard:', e);
+      }
+
+      // Verificar puerto UDP 51820
+      try {
+        console.log('🔌 Verificando puerto UDP 51820...');
+        const { stdout: portStatus } = await execAsync('sudo netstat -ulnp | grep 51820');
+        if (portStatus.trim()) {
+          console.log('✅ Puerto 51820 está escuchando:', portStatus.trim());
+        } else {
+          console.log('❌ Puerto 51820 NO está escuchando');
+        }
+      } catch (e) {
+        console.log('⚠️ Puerto 51820 no encontrado en netstat');
+      }
+
+      // Verificar firewall del sistema (ufw)
+      try {
+        const { stdout: ufwStatus } = await execAsync('sudo ufw status');
+        console.log('🛡️ Estado del firewall (ufw):', ufwStatus.includes('inactive') ? 'Desactivado' : 'Activo');
+        if (!ufwStatus.includes('inactive')) {
+          console.log('📋 Reglas UFW:', ufwStatus);
+        }
+      } catch (e) {
+        console.log('🛡️ UFW no disponible o error verificando');
+      }
+
+      // Verificar configuración de WireGuard
+      try {
+        console.log('📋 Configuración WireGuard actual:');
+        const { stdout: configContent } = await execAsync('sudo cat /etc/wireguard/wg0.conf');
+        const lines = configContent.split('\n');
+        const interfaceLines = lines.filter(line => line.includes('Address') || line.includes('ListenPort'));
+        const peerLines = lines.filter(line => line.includes('[Peer]') || line.includes('PublicKey'));
+        
+        console.log('🔧 Interface:', interfaceLines.join(', '));
+        console.log('👥 Peers configurados:', Math.floor(peerLines.filter(line => line.includes('[Peer]')).length));
+      } catch (e) {
+        console.log('⚠️ Error leyendo configuración WireGuard');
       }
       
       // Verificar IP forwarding
