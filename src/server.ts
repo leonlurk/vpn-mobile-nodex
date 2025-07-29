@@ -104,8 +104,19 @@ app.get('/api/server/info', async (req, res) => {
 // Nuevo endpoint para generar configuración WireGuard
 app.post('/api/vpn/wireguard-config', async (req, res) => {
   try {
+    console.log('🔄 INICIANDO generación de configuración WireGuard...');
+    console.log('📥 Request body:', req.body);
+    
     const userId = req.body.userId || 'anonymous-' + Date.now();
+    console.log('👤 User ID:', userId);
+    
+    console.log('🔧 Llamando a wireGuardServer.generateClientConfig...');
     const config = await wireGuardServer.generateClientConfig(userId);
+    
+    console.log('✅ Configuración generada exitosamente');
+    console.log('📋 Tipo de configuración:', typeof config);
+    console.log('📋 Longitud de configuración:', config ? config.length : 'N/A');
+    console.log('📋 Primeros 200 caracteres:', config ? config.substring(0, 200) + '...' : 'NULL');
     
     const response: ApiResponse = {
       success: true,
@@ -117,8 +128,17 @@ app.post('/api/vpn/wireguard-config', async (req, res) => {
       timestamp: new Date()
     };
     
+    console.log('📤 Enviando respuesta al cliente...');
+    console.log('📤 Respuesta structure:', {
+      success: response.success,
+      hasData: !!response.data,
+      hasConfig: !!(response.data && response.data.config),
+      configType: response.data ? typeof response.data.config : 'N/A'
+    });
+    
     res.json(response);
   } catch (error) {
+    console.error('❌ ERROR generando configuración WireGuard:', error);
     const response: ApiResponse = {
       success: false,
       error: error instanceof Error ? error.message : 'Error generando configuración',
@@ -230,5 +250,12 @@ process.on('unhandledRejection', (reason, promise) => {
 
 // Iniciar servidor
 startServer();
+
+/**
+ * Exportar instancia de WireGuard server para diagnósticos
+ */
+export function getWireGuardServer(): WireGuardServer {
+  return wireGuardServer;
+}
 
 export default app; 

@@ -148,8 +148,17 @@ export class WireGuardServer extends EventEmitter {
 PrivateKey = ${this.config.serverPrivateKey}
 Address = 10.0.0.1/24
 ListenPort = ${this.config.serverPort}
-PostUp = iptables -A FORWARD -i ${this.interfaceName} -j ACCEPT; iptables -t nat -A POSTROUTING -o eth0 -j MASQUERADE
-PostDown = iptables -D FORWARD -i ${this.interfaceName} -j ACCEPT; iptables -t nat -D POSTROUTING -o eth0 -j MASQUERADE
+PostUp = echo 1 > /proc/sys/net/ipv4/ip_forward
+PostUp = iptables -A FORWARD -i ${this.interfaceName} -j ACCEPT
+PostUp = iptables -A FORWARD -o ${this.interfaceName} -j ACCEPT
+PostUp = iptables -t nat -A POSTROUTING -o eth0 -j MASQUERADE
+PostUp = iptables -A INPUT -i ${this.interfaceName} -j ACCEPT
+PostUp = iptables -A OUTPUT -o ${this.interfaceName} -j ACCEPT
+PostDown = iptables -D FORWARD -i ${this.interfaceName} -j ACCEPT
+PostDown = iptables -D FORWARD -o ${this.interfaceName} -j ACCEPT
+PostDown = iptables -t nat -D POSTROUTING -o eth0 -j MASQUERADE
+PostDown = iptables -D INPUT -i ${this.interfaceName} -j ACCEPT
+PostDown = iptables -D OUTPUT -o ${this.interfaceName} -j ACCEPT
 
 ${this.generatePeersConfig()}`;
 
@@ -186,12 +195,66 @@ AllowedIPs = ${peer.allowedIPs}
       // Detener si ya está corriendo
       await execAsync(`sudo wg-quick down ${this.interfaceName}`).catch(() => {});
       
+      // Aplicar reglas iptables manualmente antes de iniciar
+      await this.setupFirewallRules();
+      
       // Iniciar interfaz
       await execAsync(`sudo wg-quick up ${this.interfaceName}`);
+      
+      // Verificar y aplicar reglas adicionales si es necesario
+      await this.verifyFirewallRules();
       
       console.log(`✅ Interfaz ${this.interfaceName} iniciada`);
     } catch (error) {
       throw new Error(`Error iniciando interfaz WireGuard: ${error}`);
+    }
+  }
+
+  /**
+   * Configurar reglas de firewall manualmente
+   */
+  private async setupFirewallRules(): Promise<void> {
+    try {
+      console.log('🔧 Configurando reglas de firewall...');
+      
+      // Habilitar IP forwarding
+      await execAsync('sudo sysctl -w net.ipv4.ip_forward=1');
+      
+      // Limpiar reglas existentes relacionadas con WireGuard
+      await execAsync(`sudo iptables -D FORWARD -i ${this.interfaceName} -j ACCEPT`).catch(() => {});
+      await execAsync(`sudo iptables -D FORWARD -o ${this.interfaceName} -j ACCEPT`).catch(() => {});
+      await execAsync(`sudo iptables -t nat -D POSTROUTING -o eth0 -j MASQUERADE`).catch(() => {});
+      
+      // Aplicar reglas nuevas
+      await execAsync(`sudo iptables -A FORWARD -i ${this.interfaceName} -j ACCEPT`);
+      await execAsync(`sudo iptables -A FORWARD -o ${this.interfaceName} -j ACCEPT`);
+      await execAsync(`sudo iptables -t nat -A POSTROUTING -o eth0 -j MASQUERADE`);
+      
+      console.log('✅ Reglas de firewall configuradas');
+    } catch (error) {
+      console.error('❌ Error configurando firewall:', error);
+    }
+  }
+
+  /**
+   * Verificar reglas de firewall
+   */
+  private async verifyFirewallRules(): Promise<void> {
+    try {
+      console.log('🔍 Verificando reglas de firewall...');
+      
+      const { stdout: forwardRules } = await execAsync('sudo iptables -L FORWARD | grep wg0');
+      const { stdout: natRules } = await execAsync('sudo iptables -t nat -L POSTROUTING | grep MASQUERADE');
+      
+      console.log('📋 Reglas FORWARD activas:', forwardRules);
+      console.log('📋 Reglas NAT activas:', natRules);
+      
+      // Verificar IP forwarding
+      const { stdout: ipForward } = await execAsync('cat /proc/sys/net/ipv4/ip_forward');
+      console.log('📋 IP Forwarding:', ipForward.trim() === '1' ? 'Habilitado' : 'Deshabilitado');
+      
+    } catch (error) {
+      console.warn('⚠️ Error verificando reglas:', error);
     }
   }
 

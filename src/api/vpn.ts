@@ -211,4 +211,56 @@ router.get('/servers', async (req: Request, res: Response) => {
   }
 });
 
+/**
+ * Diagnóstico del servidor VPN
+ */
+router.get('/diagnostic', async (req: Request, res: Response) => {
+  try {
+    console.log('🔍 Ejecutando diagnóstico del servidor VPN...');
+    
+    // Importar dinámicamente el servidor WireGuard
+    const { getWireGuardServer } = await import('../server');
+    const wireGuardServer = getWireGuardServer();
+    
+    if (!wireGuardServer) {
+      return res.status(500).json({
+        success: false,
+        error: 'Servidor WireGuard no inicializado',
+        timestamp: new Date()
+      } as ApiResponse);
+    }
+
+    // Obtener estadísticas
+    const stats = await wireGuardServer.getConnectionStats();
+    const serverConfig = wireGuardServer.getServerConfig();
+    const isRunning = wireGuardServer.isRunning();
+
+    const response: ApiResponse = {
+      success: true,
+      data: {
+        server: {
+          running: isRunning,
+          publicKey: serverConfig.publicKey,
+          address: serverConfig.address,
+          port: serverConfig.port
+        },
+        connections: stats,
+        timestamp: new Date()
+      },
+      timestamp: new Date()
+    };
+
+    res.json(response);
+    console.log('✅ Diagnóstico completado');
+
+  } catch (error) {
+    console.error('❌ Error en diagnóstico:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Error ejecutando diagnóstico: ' + error,
+      timestamp: new Date()
+    } as ApiResponse);
+  }
+});
+
 export default router; 
