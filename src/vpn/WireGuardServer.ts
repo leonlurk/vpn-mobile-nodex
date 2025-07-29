@@ -231,25 +231,30 @@ AllowedIPs = ${peer.allowedIPs}
         console.log('📋 No hay reglas FORWARD actuales');
       }
       
-      // PASO 2: Limpiar TODAS las reglas relacionadas con MASQUERADE y wg0
-      console.log('🧹 Limpiando reglas existentes...');
-      await execAsync('sudo iptables -t nat -F POSTROUTING').catch(() => {});
-      await execAsync('sudo iptables -F FORWARD').catch(() => {});
+      // PASO 2: NO limpiar todas las reglas (para no afectar Docker)
+      // En su lugar, remover solo las reglas específicas de WireGuard si existen
+      console.log('🧹 Limpiando reglas WireGuard existentes...');
+      await execAsync('sudo iptables -D FORWARD -i wg0 -o eth0 -j ACCEPT').catch(() => {});
+      await execAsync('sudo iptables -D FORWARD -i eth0 -o wg0 -j ACCEPT').catch(() => {});
+      await execAsync('sudo iptables -t nat -D POSTROUTING -s 10.0.0.0/24 -o eth0 -j MASQUERADE').catch(() => {});
       
-      // PASO 3: Aplicar reglas básicas FORWARD
-      console.log('🔗 Aplicando reglas FORWARD...');
-      await execAsync('sudo iptables -A FORWARD -m conntrack --ctstate RELATED,ESTABLISHED -j ACCEPT');
-      await execAsync('sudo iptables -A FORWARD -i wg0 -o eth0 -j ACCEPT');
-      await execAsync('sudo iptables -A FORWARD -i eth0 -o wg0 -j ACCEPT');
+      // PASO 3: Insertar reglas específicas al INICIO (antes de Docker)
+      console.log('🔗 Insertando reglas FORWARD específicas...');
+      await execAsync('sudo iptables -I FORWARD 1 -i wg0 -o eth0 -j ACCEPT');
+      await execAsync('sudo iptables -I FORWARD 2 -i eth0 -o wg0 -m conntrack --ctstate RELATED,ESTABLISHED -j ACCEPT');
       
       // PASO 4: Aplicar MASQUERADE
       console.log('🎭 Aplicando MASQUERADE...');
       await execAsync('sudo iptables -t nat -A POSTROUTING -s 10.0.0.0/24 -o eth0 -j MASQUERADE');
       
       // PASO 5: Permitir tráfico en INPUT y OUTPUT para wg0
-      console.log('🚪 Configurando INPUT/OUTPUT...');
-      await execAsync('sudo iptables -A INPUT -i wg0 -j ACCEPT').catch(() => {});
-      await execAsync('sudo iptables -A OUTPUT -o wg0 -j ACCEPT').catch(() => {});
+      console.log('🚪 Configurando INPUT/OUTPUT específicos...');
+      await execAsync('sudo iptables -I INPUT 1 -i wg0 -j ACCEPT').catch(() => {});
+      await execAsync('sudo iptables -I OUTPUT 1 -o wg0 -j ACCEPT').catch(() => {});
+      
+      // PASO 6: Regla adicional para asegurar tráfico desde wg0
+      console.log('🛡️ Asegurando tráfico desde subnet WireGuard...');
+      await execAsync('sudo iptables -I FORWARD 1 -s 10.0.0.0/24 -j ACCEPT');
       
       console.log('✅ Reglas de firewall configuradas');
       
@@ -265,28 +270,53 @@ AllowedIPs = ${peer.allowedIPs}
     try {
       console.log('🔍 Verificando reglas de firewall aplicadas...');
       
-      // Verificar FORWARD
+      // Verificar FORWARD con detalles de interfaces
       try {
-        const { stdout: forwardRules } = await execAsync('sudo iptables -L FORWARD -n --line-numbers');
-        console.log('📋 Reglas FORWARD:');
+        const { stdout: forwardRules } = await execAsync('sudo iptables -L FORWARD -n -v --line-numbers');
+        console.log('📋 Reglas FORWARD completas:');
         console.log(forwardRules);
         
-        const hasWg0Forward = forwardRules.includes('wg0') || forwardRules.includes('10.0.0.0/24');
-        console.log(`🔗 FORWARD para WireGuard: ${hasWg0Forward ? '✅ CONFIGURADO' : '❌ FALTANTE'}`);
+        // Buscar reglas específicas de WireGuard
+        const hasWg0ToEth0 = forwardRules.includes('wg0') && forwardRules.includes('eth0');
+        const hasSubnetRule = forwardRules.includes('10.0.0.0/24');
+        
+        console.log(`🔗 FORWARD wg0 → eth0: ${hasWg0ToEth0 ? '✅ CONFIGURADO' : '❌ FALTANTE'}`);
+        console.log(`🔗 FORWARD subnet 10.0.0.0/24: ${hasSubnetRule ? '✅ CONFIGURADO' : '❌ FALTANTE'}`);
+        
+        // Contar líneas que mencionan wg0
+        const wg0Lines = forwardRules.split('\n').filter(line => line.includes('wg0'));
+        console.log(`📊 Reglas con wg0 encontradas: ${wg0Lines.length}`);
+        wg0Lines.forEach((line, i) => console.log(`   ${i+1}. ${line.trim()}`));
+        
       } catch (e) {
-        console.log('⚠️ Error verificando FORWARD');
+        console.log('⚠️ Error verificando FORWARD:', e);
       }
       
       // Verificar MASQUERADE
       try {
-        const { stdout: natRules } = await execAsync('sudo iptables -t nat -L POSTROUTING -n --line-numbers');
+        const { stdout: natRules } = await execAsync('sudo iptables -t nat -L POSTROUTING -n -v --line-numbers');
         console.log('📋 Reglas NAT (POSTROUTING):');
         console.log(natRules);
         
         const hasMasquerade = natRules.includes('MASQUERADE') && natRules.includes('10.0.0.0/24');
         console.log(`🎭 MASQUERADE para 10.0.0.0/24: ${hasMasquerade ? '✅ CONFIGURADO' : '❌ FALTANTE'}`);
       } catch (e) {
-        console.log('⚠️ Error verificando NAT');
+        console.log('⚠️ Error verificando NAT:', e);
+      }
+      
+      // Verificar estado de WireGuard
+      try {
+        console.log('🔗 Estado de WireGuard:');
+        const { stdout: wgStatus } = await execAsync('sudo wg show');
+        console.log(wgStatus);
+        
+        if (wgStatus.includes('peer:')) {
+          console.log('👥 Clientes conectados encontrados');
+        } else {
+          console.log('👥 No hay clientes conectados aún');
+        }
+      } catch (e) {
+        console.log('⚠️ Error verificando WireGuard:', e);
       }
       
       // Verificar IP forwarding
