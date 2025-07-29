@@ -371,6 +371,20 @@ AllowedIPs = ${peer.allowedIPs}
         console.log('🛡️ Estado del firewall (ufw):', ufwStatus.includes('inactive') ? 'Desactivado' : 'Activo');
         if (!ufwStatus.includes('inactive')) {
           console.log('📋 Reglas UFW:', ufwStatus);
+          
+          // Verificar si puerto 51820 está permitido
+          if (!ufwStatus.includes('51820')) {
+            console.log('⚠️ PUERTO 51820/UDP NO ESTÁ PERMITIDO EN UFW');
+            console.log('🔧 Agregando regla UFW para WireGuard...');
+            try {
+              await execAsync('sudo ufw allow 51820/udp');
+              console.log('✅ Regla UFW agregada para puerto 51820/UDP');
+            } catch (e) {
+              console.log('❌ Error agregando regla UFW:', e);
+            }
+          } else {
+            console.log('✅ Puerto 51820/UDP permitido en UFW');
+          }
         }
       } catch (e) {
         console.log('🛡️ UFW no disponible o error verificando');
@@ -403,6 +417,32 @@ AllowedIPs = ${peer.allowedIPs}
       try {
         await execAsync('ping -c 1 8.8.8.8', { timeout: 5000 });
         console.log('✅ Servidor tiene conectividad a internet');
+        
+        // Test de DNS desde el servidor
+        try {
+          await execAsync('nslookup google.com 8.8.8.8', { timeout: 5000 });
+          console.log('✅ DNS funciona desde servidor');
+        } catch (e) {
+          console.log('❌ DNS no funciona desde servidor');
+        }
+        
+        // Test desde interfaz wg0 si existe tráfico
+        try {
+          const { stdout: wgTraffic } = await execAsync('sudo wg show wg0 transfer');
+          const hasTraffic = wgTraffic.split('\n').some(line => {
+            const parts = line.trim().split(/\s+/);
+            return parts.length >= 3 && (parseInt(parts[1]) > 0 || parseInt(parts[2]) > 0);
+          });
+          
+          if (hasTraffic) {
+            console.log('✅ Detectado tráfico en WireGuard');
+          } else {
+            console.log('⚠️ Sin tráfico en WireGuard - posible problema de enrutamiento');
+          }
+        } catch (e) {
+          console.log('⚠️ Error verificando tráfico WireGuard');
+        }
+        
       } catch (e) {
         console.log('❌ Servidor SIN conectividad a internet');
       }
