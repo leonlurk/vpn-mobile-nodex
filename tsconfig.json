@@ -35,6 +35,5 @@
     "node_modules",
     "dist",
     "**/*.test.ts"
-  ],
-  "extends": "expo/tsconfig.base"
+  ]
 }
