@@ -101,6 +101,47 @@ app.get('/api/server/info', async (req, res) => {
   res.json(response);
 });
 
+// Nuevo endpoint para generar configuración IPSec para iOS
+app.post('/api/vpn/ipsec-config', async (req, res) => {
+  try {
+    console.log('🔄 INICIANDO generación de configuración IPSec para iOS...');
+    console.log('📥 Request body:', req.body);
+    
+    const userId = req.body.userId || 'ios-user-' + Date.now();
+    console.log('👤 User ID:', userId);
+    
+    // Generar configuración IPSec básica
+    const ipsecConfig = {
+      success: true,
+      username: `user_${userId.substring(0, 8)}`,
+      password: `pass_${Math.random().toString(36).substring(2, 10)}`,
+      ipsecIdentifier: 'NodexVPN_iOS',
+      sharedSecret: 'nodex-vpn-2025-secret',
+      serverAddress: config.vpn.serverIp
+    };
+    
+    console.log('✅ Configuración IPSec generada exitosamente');
+    console.log('📋 Config:', ipsecConfig);
+    
+    const response: ApiResponse = {
+      success: true,
+      data: ipsecConfig,
+      timestamp: new Date()
+    };
+    
+    console.log('📤 Enviando respuesta IPSec al cliente...');
+    res.json(response);
+  } catch (error) {
+    console.error('❌ ERROR generando configuración IPSec:', error);
+    const response: ApiResponse = {
+      success: false,
+      error: error instanceof Error ? error.message : 'Error generando configuración IPSec',
+      timestamp: new Date()
+    };
+    res.status(500).json(response);
+  }
+});
+
 // Nuevo endpoint para generar configuración WireGuard
 app.post('/api/vpn/wireguard-config', async (req, res) => {
   try {
