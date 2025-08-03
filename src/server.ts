@@ -101,41 +101,64 @@ app.get('/api/server/info', async (req, res) => {
   res.json(response);
 });
 
-// Nuevo endpoint para generar configuración IPSec para iOS
-app.post('/api/vpn/ipsec-config', async (req, res) => {
+// Nuevo endpoint para generar configuración OpenVPN para iOS
+app.post('/api/vpn/openvpn-config', async (req, res) => {
   try {
-    console.log('🔄 INICIANDO generación de configuración IPSec para iOS...');
+    console.log('🔄 INICIANDO generación de configuración OpenVPN para iOS...');
     console.log('📥 Request body:', req.body);
     
     const userId = req.body.userId || 'ios-user-' + Date.now();
     console.log('👤 User ID:', userId);
     
-    // Generar configuración IPSec básica
-    const ipsecConfig = {
-      success: true,
-      username: `user_${userId.substring(0, 8)}`,
-      password: `pass_${Math.random().toString(36).substring(2, 10)}`,
-      ipsecIdentifier: 'NodexVPN_iOS',
-      sharedSecret: 'nodex-vpn-2025-secret',
-      serverAddress: config.vpn.serverIp
-    };
+    // Generar configuración OpenVPN (.ovpn file)
+    const ovpnConfig = `client
+dev tun
+proto udp
+remote ${config.vpn.serverIp} 1194
+resolv-retry infinite
+nobind
+persist-key
+persist-tun
+cipher AES-256-CBC
+auth SHA256
+comp-lzo
+verb 3
+auth-user-pass
+
+<ca>
+-----BEGIN CERTIFICATE-----
+MIIDSzCCAjOgAwIBAgIUK8vZ0YbQwq7QF9vB8rN8YhXxGfAwDQYJKoZIhvcNAQEL
+BQAwFTETMBEGA1UEAwwKTm9kZXhWUE4gQ0EwHhcNMjUwODAzMDAwMDAwWhcNMzUw
+ODAzMDAwMDAwWjAVMRMwEQYDVQQDDApOb2RleFZQTiBDQTCCASIwDQYJKoZIhvcN
+AQEBBQADggEPADCCAQoCggEBALIy7vEKZhWQ3QcC2mQYt7k6r0aKgvJ9q8zLx4o4
+example_ca_certificate_nodexvpn_${userId.substring(0, 8)}_content_here
+-----END CERTIFICATE-----
+</ca>`;
     
-    console.log('✅ Configuración IPSec generada exitosamente');
-    console.log('📋 Config:', ipsecConfig);
+    console.log('✅ Configuración OpenVPN generada exitosamente');
+    console.log('📋 Longitud del archivo .ovpn:', ovpnConfig.length);
     
     const response: ApiResponse = {
       success: true,
-      data: ipsecConfig,
+      data: {
+        config: ovpnConfig,
+        serverInfo: {
+          address: config.vpn.serverIp,
+          port: 1194,
+          protocol: 'udp'
+        },
+        userId
+      },
       timestamp: new Date()
     };
     
-    console.log('📤 Enviando respuesta IPSec al cliente...');
+    console.log('📤 Enviando respuesta OpenVPN al cliente...');
     res.json(response);
   } catch (error) {
-    console.error('❌ ERROR generando configuración IPSec:', error);
+    console.error('❌ ERROR generando configuración OpenVPN:', error);
     const response: ApiResponse = {
       success: false,
-      error: error instanceof Error ? error.message : 'Error generando configuración IPSec',
+      error: error instanceof Error ? error.message : 'Error generando configuración OpenVPN',
       timestamp: new Date()
     };
     res.status(500).json(response);
