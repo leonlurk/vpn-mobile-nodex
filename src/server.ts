@@ -101,64 +101,49 @@ app.get('/api/server/info', async (req, res) => {
   res.json(response);
 });
 
-// Nuevo endpoint para generar configuración OpenVPN para iOS
-app.post('/api/vpn/openvpn-config', async (req, res) => {
+// Nuevo endpoint para generar configuración IKEv2/IPsec para iOS
+app.post('/api/vpn/ikev2-config', async (req, res) => {
   try {
-    console.log('🔄 INICIANDO generación de configuración OpenVPN para iOS...');
+    console.log('🔄 INICIANDO generación de configuración IKEv2/IPsec para iOS...');
     console.log('📥 Request body:', req.body);
     
     const userId = req.body.userId || 'ios-user-' + Date.now();
     console.log('👤 User ID:', userId);
     
-    // Generar configuración OpenVPN (.ovpn file)
-    const ovpnConfig = `client
-dev tun
-proto udp
-remote ${config.vpn.serverIp} 1194
-resolv-retry infinite
-nobind
-persist-key
-persist-tun
-cipher AES-256-CBC
-auth SHA256
-comp-lzo
-verb 3
-auth-user-pass
-
-<ca>
------BEGIN CERTIFICATE-----
-MIIDSzCCAjOgAwIBAgIUK8vZ0YbQwq7QF9vB8rN8YhXxGfAwDQYJKoZIhvcNAQEL
-BQAwFTETMBEGA1UEAwwKTm9kZXhWUE4gQ0EwHhcNMjUwODAzMDAwMDAwWhcNMzUw
-ODAzMDAwMDAwWjAVMRMwEQYDVQQDDApOb2RleFZQTiBDQTCCASIwDQYJKoZIhvcN
-AQEBBQADggEPADCCAQoCggEBALIy7vEKZhWQ3QcC2mQYt7k6r0aKgvJ9q8zLx4o4
-example_ca_certificate_nodexvpn_${userId.substring(0, 8)}_content_here
------END CERTIFICATE-----
-</ca>`;
+    // Generar configuración IKEv2/IPsec
+    const ikev2Config = {
+      serverAddress: config.vpn.serverIp,
+      remoteIdentifier: `${config.vpn.serverIp}`,
+      localIdentifier: `user_${userId.substring(0, 8)}@nodexvpn.com`,
+      sharedSecret: process.env.IKEV2_SHARED_SECRET || 'NodexVPN2025SecretKey',
+      connectionName: 'NodexVPN IKEv2',
+      useEAP: false,
+      disconnectOnSleep: false,
+      enablePFS: true,
+      enableRevocationCheck: false
+    };
     
-    console.log('✅ Configuración OpenVPN generada exitosamente');
-    console.log('📋 Longitud del archivo .ovpn:', ovpnConfig.length);
+    console.log('✅ Configuración IKEv2 generada exitosamente');
+    console.log('📋 Config IKEv2:', {
+      serverAddress: ikev2Config.serverAddress,
+      remoteIdentifier: ikev2Config.remoteIdentifier,
+      localIdentifier: ikev2Config.localIdentifier,
+      authMethod: 'SharedSecret'
+    });
     
     const response: ApiResponse = {
       success: true,
-      data: {
-        config: ovpnConfig,
-        serverInfo: {
-          address: config.vpn.serverIp,
-          port: 1194,
-          protocol: 'udp'
-        },
-        userId
-      },
+      data: ikev2Config,
       timestamp: new Date()
     };
     
-    console.log('📤 Enviando respuesta OpenVPN al cliente...');
+    console.log('📤 Enviando respuesta IKEv2 al cliente...');
     res.json(response);
   } catch (error) {
-    console.error('❌ ERROR generando configuración OpenVPN:', error);
+    console.error('❌ ERROR generando configuración IKEv2:', error);
     const response: ApiResponse = {
       success: false,
-      error: error instanceof Error ? error.message : 'Error generando configuración OpenVPN',
+      error: error instanceof Error ? error.message : 'Error generando configuración IKEv2',
       timestamp: new Date()
     };
     res.status(500).json(response);
